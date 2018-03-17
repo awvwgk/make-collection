@@ -1,0 +1,32 @@
+#!/bin/env make
+# 
+# created by awvwgk in March 2018 (v 2.0)
+# this Makefile is aimed at FORTRAN code!
+#
+##############################################################################
+## put all you sources here                                                 ##
+##############################################################################
+# the program you want to have, eventually...
+NAME := 
+
+###------------------------------------------------------------------------###
+# the source holding your main-program should go in OBJSP
+# The numbering is arbitrary, but it is garanteed that
+# OBJS3 is always build before OBJS2 and so on.
+OBJSP := 
+OBJS0 := 
+OBJS1 := 
+OBJS2 := 
+# to be save, put your modules here
+OBJS3 := 
+
+# put all include files here (currently not used)
+INC  := 
+
+# libraries, do not put the program name itself here
+LIBS := mkl_blas95_lp64\
+        mkl_lapack95_lp64\
+        pthread\
+        m
+
+
