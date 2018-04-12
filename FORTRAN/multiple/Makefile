@@ -1,8 +1,23 @@
 #!/bin/env make
 # 
-# created by awvwgk in March 2018 (v 2.0)
-# this Makefile is aimed at FORTRAN code!
+# April 2018 (v 2.3) created by Sebastian Ehlert
+# 2.0: recreated from scratch                                          (1803)
+# 2.1: refined the generation of dependencies, since it crashed if not
+#      done in the main directory                                      (1803)
+# 2.2: modified the clean command, to be less severe                   (1804)
+# 2.3: added support for GNU compilers, some minor improvements        (1804)
 #
+###------------------------------------------------------------------------###
+# a nice trick to print all 'important' targets this Makefile can produce
+.PHONY: help
+
+# would be made by default if there is no .DEFAULT_GOAL set
+help:
+	@echo "This Makefile kindly provides to you:"                     && \
+	$(MAKE) --print-data-base --question |                               \
+	awk '/^[^.%][-A-Za-z0-9]*:/ {print substr($$1, 1, length($$1)-1)}' | \
+	sort | pr --omit-pagination --width=80 --columns=4
+
 ##############################################################################
 ## this is the toplevel Makefile controlling the build system               ##
 ##############################################################################
@@ -26,11 +41,13 @@ PROGRAMS +=
 
 ###------------------------------------------------------------------------###
 # set the targets
-.PHONY: all main libs progs setup depend clean veryclean
+.PHONY: all main libraries programs setup depend
 .PHONY: $(PROGRAMS)
 
 # this is the first, so it would be made by default
-all: setup libs progs
+all: setup
+all: libraries
+all: programs
 
 # we can also enforce it by
 .DEFAULT_GOAL=all
@@ -45,7 +62,7 @@ PROGNAME := $(patsubst %,$(EXEDIR)/%,$(PROGRAMS))
 #endif # BIN
 # everything should also dependent on the local Makefile
 ifeq ($(MAKEFILE_DEP),yes)
-   MAKEDEP := Makefile
+   MAKEDEP := $(filter-out %.d, $(MAKEFILE_LIST))
 endif # DEP
 
 ###------------------------------------------------------------------------###
@@ -74,24 +91,29 @@ $(DEPDIR):
 
 ###------------------------------------------------------------------------###
 # set up the targets for all
-progs: $(PROGNAME)
+programs: $(PROGNAME)
 
-libs: $(LIBNAME)
+libraries: $(LIBNAME)
 
 ###------------------------------------------------------------------------###
 # now the rules to actually start the submakefiles
 $(EXEDIR)/%:
-	$(MAKE) -C $(patsubst $(EXEDIR)/%,%,$(MAINDIR)/$@) prog
+	$(MAKE) -C $(patsubst $(EXEDIR)/%,%,$(MAINDIR)/$@) program
 
 $(LIBDIR)/lib%.a:
-	$(MAKE) -C $(patsubst $(LIBDIR)/lib%.a,%,$(MAINDIR)/$@) lib
+	$(MAKE) -C $(patsubst $(LIBDIR)/lib%.a,%,$(MAINDIR)/$@) library
 
 ###------------------------------------------------------------------------###
 # clean up, at the right places
+.PHONY: clean distclean veryclean
+
 clean:
+	$(RM) $(OUTDIR)/*.o
+
+distclean:
 	$(RM) $(OUTDIR)/*.o $(MODDIR)/*.mod $(PROGNAME) $(LIBNAME)
 
 # in case you use the dependency build you can get rid of those files to
-veryclean: clean
+veryclean: distclean
 	$(RM) $(DEPDIR)/*.d
 

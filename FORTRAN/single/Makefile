@@ -1,8 +1,23 @@
 #!/bin/env make
 # 
-# created by awvwgk in March 2018 (v 2.0)
-# this Makefile is aimed at FORTRAN code!
+# April 2018 (v 2.3) created by Sebastian Ehlert
+# 2.0: recreated from scratch                                          (1803)
+# 2.1: refined the generation of dependencies, since it crashed if not
+#      done in the main directory                                      (1803)
+# 2.2: modified the clean command, to be less severe                   (1804)
+# 2.3: added support for GNU compilers, some minor improvements        (1804)
 #
+###------------------------------------------------------------------------###
+# a nice trick to print all 'important' targets this Makefile can produce
+.PHONY: help
+
+# would be made by default if there is no .DEFAULT_GOAL set
+help:
+	@echo "This Makefile kindly provides to you:"                     && \
+	$(MAKE) --print-data-base --question |                               \
+	awk '/^[^.%][-A-Za-z0-9]*:/ {print substr($$1, 1, length($$1)-1)}' | \
+	sort | pr --omit-pagination --width=80 --columns=4
+
 ##############################################################################
 ## put all you sources here, if you do not know how this Makefile works,    ##
 ## only edit here:                                                          ##
@@ -77,12 +92,15 @@ DEPDIR  := $(MAINDIR)/.depend
 ###------------------------------------------------------------------------###
 # set the path for make to search in (normally the SRCDIR is enough):
 vpath % $(SRCDIR)
+# look for modules expecially in the directory where the modules are put
+vpath %.mod $(MODDIR)
 
 ###------------------------------------------------------------------------###
 # to use the Intel-Compiler please set MKLROOT somewhere
 ifeq ($(OSTYPE),LINUXI)
 FC := ifort
 CC := icc
+CXX := icc
 
 # compile flags
 FCFLAGS := -O -axAVX -qopenmp
@@ -92,10 +110,13 @@ FCFLAGS += -I$(INCDIR)                       \
            -I$(MKLROOT)/include
 CCFLAGS := -O -DLINUX
 CCFLAGS += -D_Float128=__float128
+CXXFLAGS := -O
+CXXFLAGS += -D_Float128=__float128
 # check for debug build
 ifeq ($(DEBUG_BUILD),yes)
 FCFLAGS += -g -traceback
 CCFLAGS += -g -DEBUG
+CXXFLAGS += -g -DEBUG
 endif # DEBUG
 
 # linker
@@ -121,17 +142,25 @@ endif # LINUXI
 
 ###------------------------------------------------------------------------###
 # set the targets
-.PHONY: all lib prog setup depend clean veryclean
+.PHONY: all library program setup depend
 
 # this is the first, so it will be made by default
-all: setup lib prog
+all: setup
+ifneq ($(BUILD_MODE),PROG_ONLY)
+all: library
+endif # BUILD_MODE
+ifneq ($(BUILD_MODE),LIB_ONLY)
+all: program
+endif # BUILD_MODE
 
 # we can also enforce it by
 .DEFAULT_GOAL=all
 
 ###------------------------------------------------------------------------###
 # generate the name of the program and the library
-LIBNAME  := $(LIBDIR)/lib$(NAME).a
+ifneq ($(BUILD_MODE),PROG_ONLY)
+   LIBNAME := $(LIBDIR)/lib$(NAME).a
+endif # BUILD_MODE
 PROGNAME := $(EXEDIR)/$(NAME)
 ifeq ($(BUILD_IN_BIN),yes)
    PROGNAME += $(HOME)/bin/$(NAME)
@@ -148,21 +177,31 @@ OBJS1 := $(addprefix $(OUTDIR)/,$(OBJS1))
 OBJS0 := $(addprefix $(OUTDIR)/,$(OBJS0))
 OBJSP := $(addprefix $(OUTDIR)/,$(OBJSP))
 # libraries
-LIBS  := $(addprefix -l,$(NAME) $(LIBS))
+ifneq ($(BUILD_MODE),PROG_ONLY)
+    LIBS := $(NAME) $(LIBS)
+endif # BUILD_MODE
+LIBS  := $(addprefix -l,$(LIBS))
 # we merge all files for convinience
-OBJS:= $(OBJSP) $(OBJS3) $(OBJS2) $(OBJS1) $(OBJS0)
+OBJS := $(OBJSP)
+OBJS += $(OBJS3)
+OBJS += $(OBJS2)
+OBJS += $(OBJS1)
+OBJS += $(OBJS0)
+ifeq ($(BUILD_MODE),PROG_ONLY)
+   OBJSP := $(OBJS)
+endif # BUILD_MODE
 # everything should also dependent on the local Makefile
 ifeq ($(MAKEFILE_DEP),yes)
-   MAKEDEP := Makefile
+   MAKEDEP := $(filter-out %.d, $(MAKEFILE_LIST))
 endif # DEP
 ifeq ($(DEP_MAKEFILE_DEP),yes)
-   DEPMAKEDEP := Makefile
+   DEPMAKEDEP := $(filter-out %.d, $(MAKEFILE_LIST))
 endif # DEP
 
 ###------------------------------------------------------------------------###
 # set up the targets for all
-lib: $(LIBNAME)
-prog: $(PROGNAME)
+library: $(LIBNAME)
+program: $(PROGNAME)
 
 ifeq ($(USE_DEPENDENCIES),yes)
 depend: $(DEPS)
@@ -170,10 +209,21 @@ endif # DEP
 
 ###------------------------------------------------------------------------###
 # define how to actually generate the library and the program
+ifeq ($(REBUILD_LIB),yes)
+$(LIBNAME): $(OBJS3) $(OBJS2) $(OBJS1) $(OBJS0)
+	@echo "recreating $@"                   && \
+	$(RM) $@                                && \
+	$(AR) $(ARFLAGS) $@ $^                  && \
+	echo "finished building $@ successfully"
+
+else
 $(LIBNAME): $(OBJS3) $(OBJS2) $(OBJS1) $(OBJS0)
 	@echo "creating $@"                     && \
-	$(AR) rv $@ $^                          && \
+	$(AR) $(ARFLAGS) $@ $?                  && \
 	echo "finished building $@ successfully"
+
+endif
+
 
 # build everything together
 $(PROGNAME): $(LIBNAME) $(OBJSP)
@@ -186,12 +236,14 @@ $(PROGNAME): $(LIBNAME) $(OBJSP)
 %.o : %.mod
 %.f : %.F
 
+%.mod: %.o
+
 # now the rules to actually build the object files
 $(OUTDIR)/%.o: %.f $(MAKEDEP)
 	@echo "making $@ from $<" && \
 	$(FC) $(FCFLAGS) -c $< -o $@
 
-$(OUTDIR)/%.o: %.f90 $(DEPDIR)/%.d $(MAKEDEP)
+$(OUTDIR)/%.o: %.f90 $(MAKEDEP)
 	@echo "making $@ from $<" && \
 	$(FC) $(FCFLAGS) -c $< -o $@
 
@@ -199,27 +251,37 @@ $(OUTDIR)/%.o: %.c $(MAKEDEP)
 	@echo "making $@ from $<" && \
 	$(CC) $(CCFLAGS) -c $< -o $@
 
+$(OUTDIR)/%.o: %.cc $(MAKEDEP)
+	@echo "making $@ from $<" && \
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 
 ifeq ($(USE_DEPENDENCIES),yes)
 # this is a crutial part of this Makefile!
 -include $(DEPS)
 
+$(OUTDIR)/%.o: $(DEPDIR)/%.d
+
 # now for the dependencies,
 # we use a script hacked together in ruby (v 2.5.0) for this job
 $(DEPDIR)/%.d: %.f90 $(DEPMAKEDEP)
-	@echo "generating dependencies for $<"                        && \
-	deps=`ruby $(MAINDIR)/depend.rb $<`                           && \
-	echo "\$$(OUTDIR)/$(patsubst $(DEPDIR)/%.d,%.o,./$@)$$deps" | tee $@
+	@echo "generating dependencies for $<"    && \
+	deps=`ruby $(MAKEDIR)/depend.rb $<`       && \
+	echo "\$$(OUTDIR)/$*.o:$$deps" > $@
 
 $(DEPDIR)/%.d: %.f $(DEPMAKEDEP)
-	@echo "generating dependencies for $<"                        && \
-	deps=`ruby $(MAINDIR)/depend.rb $<`                           && \
-	echo "\$$(OUTDIR)/$(patsubst $(DEPDIR)/%.d,%.o,./$@)$$deps" | tee $@
+	@echo "generating dependencies for $<"    && \
+	deps=`ruby $(MAKEDIR)/depend.rb $<`       && \
+	echo "\$$(OUTDIR)/$*.o:$$deps" > $@
 
-# deactivate dependency generation for C-code
-$(DEPDIR)/%.d: %.c %.h $(DEPMAKEDEP)
-	@echo "generating no dependencies for $<"                     && \
-	echo "\$$(OUTDIR)/$(patsubst $(DEPDIR)/%.d,%.o,./$@):" | tee $@
+# no hacks needed for C/C++ dependencies
+$(DEPDIR)/%.d: %.c $(DEPMAKEDEP)
+	@echo "generating dependencies for $<" && \
+	$(CC) $(CPPFLAGS) -MM $< > $@
+
+$(DEPDIR)/%.d: %.cc $(DEPMAKEDEP)
+	@echo "generating dependencies for $<" && \
+	$(CXX) $(CPPFLAGS) -MM $< > $@
 
 endif # DEP
 
@@ -249,10 +311,14 @@ $(DEPDIR):
 
 ###------------------------------------------------------------------------###
 # clean up, at the right places
+.PHONY: clean distclean veryclean
+
 clean:
+	$(RM) $(filter %.o,$(OBJS))
+
+distclean:
 	$(RM) $(OUTDIR)/*.o $(MODDIR)/*.mod $(PROGNAME) $(LIBNAME)
 
 # in case you use the dependency build you can get rid of those files to
-veryclean: clean
+veryclean: distclean
 	$(RM) $(DEPDIR)/*.d
-

@@ -1,7 +1,11 @@
 #!/bin/env make
 # 
-# created by awvwgk in March 2018 (v 2.0)
-# this Makefile is aimed at FORTRAN code!
+# April 2018 (v 2.3) created by Sebastian Ehlert
+# 2.0: recreated from scratch                                          (1803)
+# 2.1: refined the generation of dependencies, since it crashed if not
+#      done in the main directory                                      (1803)
+# 2.2: modified the clean command, to be less severe                   (1804)
+# 2.3: added support for GNU compilers, some minor improvements        (1804)
 #
 ##############################################################################
 ## put local configurations here                                            ##
@@ -26,6 +30,25 @@ USE_DEPENDENCIES := yes
 # also make the dependency files Makefile dependent
 DEP_MAKEFILE_DEP := no
 
-# choose your compiler here (you can choose LINUXI)
+# sometimes it is not desirable to create a library, or even a binary
+# use LIB_ONLY to create only the library and PROG_ONLY to ommit the library
+BUILD_MODE  := default
+
+# for big libraries it is sometimes faster to recreate the library then
+# replacing some members, but this matters only for *really big* libraries
+REBUILD_LIB := no
+
+# choose your compiler here (you can choose LINUXI or LINUXG)
 OSTYPE := LINUXI
+
+###------------------------------------------------------------------------###
+# put all files to appropiate places
+EXEDIR  := $(MAINDIR)/exe
+LIBDIR  := $(MAINDIR)/lib
+INCDIR  := $(MAINDIR)/include
+MODDIR  := $(MAINDIR)/modules
+# you can use a local build directory to separate the build
+# from the main program
+OUTDIR  := $(MAINDIR)/build
+DEPDIR  := $(MAINDIR)/.depend
 

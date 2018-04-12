@@ -1,7 +1,11 @@
 #!/bin/env make
 # 
-# created by awvwgk in March 2018 (v 2.0)
-# this Makefile is aimed at FORTRAN code!
+# April 2018 (v 2.3) created by Sebastian Ehlert
+# 2.0: recreated from scratch                                          (1803)
+# 2.1: refined the generation of dependencies, since it crashed if not
+#      done in the main directory                                      (1803)
+# 2.2: modified the clean command, to be less severe                   (1804)
+# 2.3: added support for GNU compilers, some minor improvements        (1804)
 #
 ##############################################################################
 ## put all you sources here                                                 ##
