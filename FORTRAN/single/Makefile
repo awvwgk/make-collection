@@ -45,6 +45,14 @@ USE_DEPENDENCIES := yes
 # also make the dependency files Makefile dependent
 DEP_MAKEFILE_DEP := no
 
+# sometimes it is not desirable to create a library, or even a binary
+# use LIB_ONLY to create only the library and PROG_ONLY to ommit the library
+BUILD_MODE  := default
+
+# for big libraries it is sometimes faster to recreate the library then
+# replacing some members, but this matters only for *really big* libraries
+REBUILD_LIB := no
+
 ###------------------------------------------------------------------------###
 # put all sources needed for the build here
 # the source holding your main-program should go in OBJSP
@@ -66,7 +74,7 @@ LIBS := mkl_blas95_lp64\
         pthread\
         m
 
-# choose your compiler here (you can choose LINUXI)
+# choose your compiler here (you can choose LINUXI or LINUXG)
 OSTYPE := LINUXI
 
 ###------------------------------------------------------------------------###
@@ -139,6 +147,52 @@ FLFLAGS += -Wl,--start-group     \
            -Wl,--end-group
 
 endif # LINUXI
+
+###------------------------------------------------------------------------###
+# GNU compilers using Intel's MKL
+ifeq ($(OSTYPE),LINUXG)
+FC := gfortran
+CC := gcc
+CXX := g++
+
+# compile flags
+CCFLAGS := -O -DLINUX
+CXXFLAGS := -O -DLINUX
+
+FCFLAGS := -O 
+# add path to modules
+FCFLAGS += -J$(MODDIR)
+# add path to include files
+FCFLAGS += -I$(INCDIR)
+# dunno
+FCFLAGS += -m64
+# you don't want this
+#FCFLAGS += -Wall
+# check for debug build
+ifeq ($(DEBUG_BUILD),yes)
+FCFLAGS += -g
+CCFLAGS += -g
+CXXFLAGS += -g
+endif # DEBUG
+
+
+# linker
+FL := gfortran
+
+# general flags for linking, this is build incremental to get an overview
+FLFLAGS := -static-libgfortran -fopenmp
+# add path to libraries
+FLFLAGS += -L$(MKLROOT)/lib/intel64 \
+           -L$(LIBDIR)
+# add special linker options for the MKL library
+FLFLAGS += -Wl,--start-group     \
+              -lmkl_gf_lp64      \
+              -lmkl_intel_thread \
+              -lmkl_core         \
+           -Wl,--end-group
+# dunno
+LIBS += iomp5 dl
+endif # LINUXG
 
 ###------------------------------------------------------------------------###
 # set the targets
